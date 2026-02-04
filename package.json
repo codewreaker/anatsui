@@ -3,17 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "packages/*",
+    "packages/wasm",
     "apps/*"
   ],
   "scripts": {
-    "dev": "bun run --filter './apps/*' dev",
-    "build": "bun run build:wasm && bun run --filter './apps/*' build",
-    "build:wasm": "cd packages/core && wasm-pack build --target web --out-dir ../wasm/pkg",
-    "test": "bun run --filter '*' test",
-    "lint": "bun run --filter '*' lint",
-    "clean": "rm -rf packages/wasm/pkg && bun run --filter '*' clean",
-    "typecheck": "bun run --filter '*' typecheck"
+    "start": "bun build:wasm && bun dev",
+    "dev": "bun run dev:web",
+    "dev:web": "bun run --cwd apps/web dev",
+    "dev:server": "bun run --cwd apps/server dev",
+    "dev:all": "bun run dev:server & bun run dev:web",
+    "build": "bun run build:wasm && bun run build:web",
+    "build:wasm": "cd packages/core && wasm-pack build --target web --release --out-dir ../wasm/pkg",
+    "build:wasm:dev": "cd packages/core && wasm-pack build --target web --dev --out-dir ../wasm/pkg",
+    "build:web": "bun run --cwd apps/web build",
+    "build:server": "bun run --cwd apps/server build",
+    "start:server": "bun run --cwd apps/server start",
+    "preview": "bun run --cwd apps/web preview",
+    "clean": "rm -rf packages/wasm/pkg apps/web/dist apps/server/dist",
+    "typecheck": "bun run --cwd apps/web tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",

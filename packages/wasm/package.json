@@ -1,0 +1,13 @@
+{
+  "name": "@anatsui/wasm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./pkg/anatsui_core.js",
+  "types": "./pkg/anatsui_core.d.ts",
+  "files": ["pkg"],
+  "scripts": {
+    "build": "cd ../core && wasm-pack build --target web --out-dir ../wasm/pkg",
+    "build:dev": "cd ../core && wasm-pack build --target web --dev --out-dir ../wasm/pkg"
+  }
+}
