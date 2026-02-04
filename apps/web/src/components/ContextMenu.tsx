@@ -10,7 +10,7 @@ interface ContextMenuProps {
 
 function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const { getNode, updateNode, deleteNode, selectNodes, addNode, document } = useEditorStore();
+  const { getNode, updateNode, deleteNode, selectNodes, addNode, document: editorDocument } = useEditorStore();
   
   const node = getNode(nodeId);
 
@@ -28,11 +28,11 @@ function ContextMenu({ x, y, nodeId, onClose }: ContextMenuProps) {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
+    window.document.addEventListener('mousedown', handleClickOutside);
+    window.document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
+      window.document.removeEventListener('mousedown', handleClickOutside);
+      window.document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
 

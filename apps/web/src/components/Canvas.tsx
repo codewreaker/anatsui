@@ -36,6 +36,7 @@ function Canvas() {
   const [dragMode, setDragMode] = useState<'create' | 'move' | 'pan' | null>(null);
   const [movingNodeId, setMovingNodeId] = useState<string | null>(null);
   const [moveStartPos, setMoveStartPos] = useState<Point | null>(null);
+  const [currentMousePos, setCurrentMousePos] = useState<Point>({ x: 0, y: 0 });
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
@@ -138,6 +139,10 @@ function Canvas() {
 
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+    const canvasPoint = screenToCanvas(screenX, screenY);
+    
+    // Always update current mouse position for pen tool preview
+    setCurrentMousePos(canvasPoint);
 
     if (isDragging) {
       if (dragMode === 'pan' || tool === 'hand' || isSpacePressed) {
@@ -462,7 +467,15 @@ function Canvas() {
       for (let i = 1; i < penPoints.length; i++) {
         ctx.lineTo(penPoints[i].x, penPoints[i].y);
       }
+      
+      // Draw preview line to current mouse position
+      if (penPoints.length >= 1) {
+        ctx.setLineDash([5 / zoom, 5 / zoom]);
+        ctx.lineTo(currentMousePos.x, currentMousePos.y);
+      }
+      
       ctx.stroke();
+      ctx.setLineDash([]);
 
       // Draw points
       const pointRadius = 4 / zoom;
@@ -470,6 +483,7 @@ function Canvas() {
         ctx.beginPath();
         ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = '#0d99ff';
         ctx.stroke();
         
         // Highlight first point (for closing path)
@@ -484,7 +498,7 @@ function Canvas() {
     }
 
     ctx.restore();
-  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints]);
+  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints, currentMousePos]);
 
   // Get cursor style based on tool and state
   const getCursor = (): string => {
