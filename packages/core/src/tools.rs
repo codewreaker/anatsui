@@ -126,13 +126,24 @@ impl ToolState {
         self.current_y - self.start_y
     }
 
-    /// Get the bounding box of the current drag
-    pub fn drag_bounds(&self) -> (f32, f32, f32, f32) {
-        let x = self.start_x.min(self.current_x);
-        let y = self.start_y.min(self.current_y);
-        let width = (self.current_x - self.start_x).abs();
-        let height = (self.current_y - self.start_y).abs();
-        (x, y, width, height)
+    /// Get the X coordinate of the drag bounds
+    pub fn drag_bounds_x(&self) -> f32 {
+        self.start_x.min(self.current_x)
+    }
+
+    /// Get the Y coordinate of the drag bounds
+    pub fn drag_bounds_y(&self) -> f32 {
+        self.start_y.min(self.current_y)
+    }
+
+    /// Get the width of the drag bounds
+    pub fn drag_bounds_width(&self) -> f32 {
+        (self.current_x - self.start_x).abs()
+    }
+
+    /// Get the height of the drag bounds
+    pub fn drag_bounds_height(&self) -> f32 {
+        (self.current_y - self.start_y).abs()
     }
 
     /// Get selection count

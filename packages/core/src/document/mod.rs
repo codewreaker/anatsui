@@ -186,13 +186,70 @@ impl Document {
         text_id
     }
 
-    /// Get a node by ID
-    pub fn get_node(&self, id: ObjectId) -> Option<Node> {
+    /// Check if a node exists
+    pub fn has_node(&self, id: ObjectId) -> bool {
+        self.tree.get(id).is_some()
+    }
+
+    /// Get a node by ID (internal use - not exposed to WASM)
+    pub(crate) fn get_node(&self, id: ObjectId) -> Option<Node> {
         self.tree.get(id).cloned()
     }
 
-    /// Update a node property
-    pub fn set_node_property(&mut self, id: ObjectId, property: Property, value: PropertyValue) {
+    /// Get node X position
+    pub fn get_node_x(&self, id: ObjectId) -> f32 {
+        self.tree.get(id).map(|n| n.x()).unwrap_or(0.0)
+    }
+
+    /// Get node Y position
+    pub fn get_node_y(&self, id: ObjectId) -> f32 {
+        self.tree.get(id).map(|n| n.y()).unwrap_or(0.0)
+    }
+
+    /// Get node width
+    pub fn get_node_width(&self, id: ObjectId) -> f32 {
+        self.tree.get(id).map(|n| n.width()).unwrap_or(0.0)
+    }
+
+    /// Get node height
+    pub fn get_node_height(&self, id: ObjectId) -> f32 {
+        self.tree.get(id).map(|n| n.height()).unwrap_or(0.0)
+    }
+
+    /// Set node X position
+    pub fn set_node_x(&mut self, id: ObjectId, x: f32) {
+        if let Some(node) = self.tree.get_mut(id) {
+            node.set_property(Property::X, PropertyValue::Float(x));
+            self.version += 1;
+        }
+    }
+
+    /// Set node Y position
+    pub fn set_node_y(&mut self, id: ObjectId, y: f32) {
+        if let Some(node) = self.tree.get_mut(id) {
+            node.set_property(Property::Y, PropertyValue::Float(y));
+            self.version += 1;
+        }
+    }
+
+    /// Set node width
+    pub fn set_node_width(&mut self, id: ObjectId, width: f32) {
+        if let Some(node) = self.tree.get_mut(id) {
+            node.set_property(Property::Width, PropertyValue::Float(width));
+            self.version += 1;
+        }
+    }
+
+    /// Set node height
+    pub fn set_node_height(&mut self, id: ObjectId, height: f32) {
+        if let Some(node) = self.tree.get_mut(id) {
+            node.set_property(Property::Height, PropertyValue::Float(height));
+            self.version += 1;
+        }
+    }
+
+    /// Update a node property (internal use)
+    pub(crate) fn set_node_property(&mut self, id: ObjectId, property: Property, value: PropertyValue) {
         if let Some(node) = self.tree.get_mut(id) {
             node.set_property(property, value);
             self.version += 1;

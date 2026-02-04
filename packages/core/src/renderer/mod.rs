@@ -126,9 +126,11 @@ impl Renderer {
             }
         }
     }
+}
 
-    /// Render a single node
-    pub fn render_node(&mut self, node: &Node) {
+impl Renderer {
+    /// Render a single node (internal, not exported to WASM)
+    fn render_node(&mut self, node: &Node) {
         let x = node.x();
         let y = node.y();
         let width = node.width();

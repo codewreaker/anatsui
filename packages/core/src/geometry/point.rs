@@ -86,14 +86,24 @@ impl VectorPoint {
         self.adjust_handles_for_type();
     }
 
-    /// Get absolute position of incoming handle
-    pub fn handle_in_absolute(&self) -> (f32, f32) {
-        (self.x + self.handle_in_x, self.y + self.handle_in_y)
+    /// Get absolute X position of incoming handle
+    pub fn handle_in_absolute_x(&self) -> f32 {
+        self.x + self.handle_in_x
     }
 
-    /// Get absolute position of outgoing handle
-    pub fn handle_out_absolute(&self) -> (f32, f32) {
-        (self.x + self.handle_out_x, self.y + self.handle_out_y)
+    /// Get absolute Y position of incoming handle
+    pub fn handle_in_absolute_y(&self) -> f32 {
+        self.y + self.handle_in_y
+    }
+
+    /// Get absolute X position of outgoing handle
+    pub fn handle_out_absolute_x(&self) -> f32 {
+        self.x + self.handle_out_x
+    }
+
+    /// Get absolute Y position of outgoing handle
+    pub fn handle_out_absolute_y(&self) -> f32 {
+        self.y + self.handle_out_y
     }
 
     /// Check if this point has handles (is curved)
