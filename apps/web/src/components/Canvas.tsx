@@ -1,6 +1,14 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
-import type { ToolType, Point, DesignNode } from '../types';
+import ContextMenu from './ContextMenu';
+import type { Point, DesignNode } from '../types';
+
+interface PenPoint {
+  x: number;
+  y: number;
+  handleIn?: Point;
+  handleOut?: Point;
+}
 
 function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,12 +24,25 @@ function Canvas() {
     selection,
     addNode,
     selectNodes,
+    addToSelection,
     clearSelection,
+    updateNode,
+    isSpacePressed,
   } = useEditorStore();
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<Point>({ x: 0, y: 0 });
   const [dragCurrent, setDragCurrent] = useState<Point>({ x: 0, y: 0 });
+  const [dragMode, setDragMode] = useState<'create' | 'move' | 'pan' | null>(null);
+  const [movingNodeId, setMovingNodeId] = useState<string | null>(null);
+  const [moveStartPos, setMoveStartPos] = useState<Point | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+
+  // Pen tool state
+  const [penPoints, setPenPoints] = useState<PenPoint[]>([]);
+  const [, setIsPenActive] = useState(false);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback((screenX: number, screenY: number): Point => {
@@ -33,6 +54,25 @@ function Canvas() {
 
   // Generate unique ID
   const generateId = () => `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Hit test - find node at position
+  const hitTest = useCallback((canvasX: number, canvasY: number): string | null => {
+    // Check nodes in reverse order (top to bottom)
+    const nodes = Array.from(document.nodes.values()).filter(n => n.type !== 'page' && n.visible && !n.locked);
+    
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const node = nodes[i];
+      if (
+        canvasX >= node.x &&
+        canvasX <= node.x + node.width &&
+        canvasY >= node.y &&
+        canvasY <= node.y + node.height
+      ) {
+        return node.id;
+      }
+    }
+    return null;
+  }, [document.nodes]);
 
   // Handle mouse down
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -47,11 +87,49 @@ function Canvas() {
     setDragStart(canvasPoint);
     setDragCurrent(canvasPoint);
 
-    if (tool === 'select') {
-      // Hit testing would go here
-      clearSelection();
+    // Space bar panning
+    if (isSpacePressed || tool === 'hand') {
+      setDragMode('pan');
+      return;
     }
-  }, [tool, screenToCanvas, clearSelection]);
+
+    if (tool === 'select') {
+      // Hit test for selection
+      const hitNodeId = hitTest(canvasPoint.x, canvasPoint.y);
+      
+      if (hitNodeId) {
+        if (e.shiftKey) {
+          // Add to selection
+          addToSelection(hitNodeId);
+        } else if (!selection.includes(hitNodeId)) {
+          // Select this node
+          selectNodes([hitNodeId]);
+        }
+        // Start moving
+        setDragMode('move');
+        setMovingNodeId(hitNodeId);
+        const node = document.nodes.get(hitNodeId);
+        if (node) {
+          setMoveStartPos({ x: node.x, y: node.y });
+        }
+      } else {
+        // Clear selection if clicking empty space
+        if (!e.shiftKey) {
+          clearSelection();
+        }
+        setDragMode('create'); // Marquee selection would go here
+      }
+    } else if (tool === 'pen') {
+      // Pen tool - add point
+      const newPoint: PenPoint = { x: canvasPoint.x, y: canvasPoint.y };
+      setPenPoints(prev => [...prev, newPoint]);
+      setIsPenActive(true);
+      setDragMode(null);
+      setIsDragging(false);
+    } else {
+      setDragMode('create');
+    }
+  }, [tool, screenToCanvas, isSpacePressed, hitTest, selection, addToSelection, selectNodes, clearSelection, document.nodes]);
 
   // Handle mouse move
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -62,22 +140,33 @@ function Canvas() {
     const screenY = e.clientY - rect.top;
 
     if (isDragging) {
-      if (tool === 'hand') {
+      if (dragMode === 'pan' || tool === 'hand' || isSpacePressed) {
         // Pan the canvas
         setPan(panX + e.movementX, panY + e.movementY);
+      } else if (dragMode === 'move' && movingNodeId) {
+        // Move selected nodes using movement delta
+        selection.forEach(nodeId => {
+          const node = document.nodes.get(nodeId);
+          if (node && !node.locked) {
+            updateNode(nodeId, {
+              x: node.x + e.movementX / zoom,
+              y: node.y + e.movementY / zoom,
+            });
+          }
+        });
       } else {
         const canvasPoint = screenToCanvas(screenX, screenY);
         setDragCurrent(canvasPoint);
       }
     }
-  }, [isDragging, tool, panX, panY, setPan, screenToCanvas]);
+  }, [isDragging, dragMode, tool, isSpacePressed, panX, panY, setPan, screenToCanvas, movingNodeId, selection, document.nodes, updateNode, zoom]);
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
     if (!isDragging) return;
 
     // Create shape based on tool
-    if (['rectangle', 'ellipse', 'frame', 'line'].includes(tool)) {
+    if (dragMode === 'create' && ['rectangle', 'ellipse', 'frame', 'line'].includes(tool)) {
       const x = Math.min(dragStart.x, dragCurrent.x);
       const y = Math.min(dragStart.y, dragCurrent.y);
       const width = Math.abs(dragCurrent.x - dragStart.x);
@@ -118,7 +207,72 @@ function Canvas() {
     }
 
     setIsDragging(false);
-  }, [isDragging, tool, dragStart, dragCurrent, document.nodes.size, addNode, selectNodes]);
+    setDragMode(null);
+    setMovingNodeId(null);
+  }, [isDragging, dragMode, tool, dragStart, dragCurrent, document.nodes.size, addNode, selectNodes]);
+
+  // Handle right click (context menu)
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const canvasPoint = screenToCanvas(screenX, screenY);
+
+    const hitNodeId = hitTest(canvasPoint.x, canvasPoint.y);
+    
+    if (hitNodeId) {
+      if (!selection.includes(hitNodeId)) {
+        selectNodes([hitNodeId]);
+      }
+      setContextMenu({ x: e.clientX, y: e.clientY, nodeId: hitNodeId });
+    } else {
+      setContextMenu(null);
+    }
+  }, [screenToCanvas, hitTest, selection, selectNodes]);
+
+  // Handle double click to finish pen path
+  const handleDoubleClick = useCallback(() => {
+    if (tool === 'pen' && penPoints.length >= 2) {
+      // Create vector path from pen points
+      // For now, just create a simple line representation
+      const minX = Math.min(...penPoints.map(p => p.x));
+      const minY = Math.min(...penPoints.map(p => p.y));
+      const maxX = Math.max(...penPoints.map(p => p.x));
+      const maxY = Math.max(...penPoints.map(p => p.y));
+
+      const node: DesignNode = {
+        id: generateId(),
+        type: 'vector',
+        name: `Vector ${document.nodes.size + 1}`,
+        visible: true,
+        locked: false,
+        x: minX,
+        y: minY,
+        width: maxX - minX || 1,
+        height: maxY - minY || 1,
+        rotation: 0,
+        opacity: 1,
+        fills: [],
+        strokes: [{
+          color: { r: 0, g: 0, b: 0, a: 1 },
+          width: 2,
+          visible: true,
+          opacity: 1,
+        }],
+        cornerRadius: 0,
+        parentId: 'page-1',
+      };
+
+      addNode(node);
+      selectNodes([node.id]);
+      setPenPoints([]);
+      setIsPenActive(false);
+    }
+  }, [tool, penPoints, document.nodes.size, addNode, selectNodes]);
 
   // Handle wheel (zoom/pan)
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -275,7 +429,7 @@ function Canvas() {
     });
 
     // Draw drag preview
-    if (isDragging && ['rectangle', 'ellipse', 'frame'].includes(tool)) {
+    if (isDragging && dragMode === 'create' && ['rectangle', 'ellipse', 'frame'].includes(tool)) {
       const x = Math.min(dragStart.x, dragCurrent.x);
       const y = Math.min(dragStart.y, dragCurrent.y);
       const width = Math.abs(dragCurrent.x - dragStart.x);
@@ -296,12 +450,52 @@ function Canvas() {
       ctx.setLineDash([]);
     }
 
-    ctx.restore();
-  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragStart, dragCurrent, tool]);
+    // Draw pen tool path preview
+    if (tool === 'pen' && penPoints.length > 0) {
+      ctx.strokeStyle = '#0d99ff';
+      ctx.lineWidth = 2 / zoom;
+      ctx.fillStyle = '#ffffff';
+      
+      // Draw lines between points
+      ctx.beginPath();
+      ctx.moveTo(penPoints[0].x, penPoints[0].y);
+      for (let i = 1; i < penPoints.length; i++) {
+        ctx.lineTo(penPoints[i].x, penPoints[i].y);
+      }
+      ctx.stroke();
 
-  // Get cursor style based on tool
+      // Draw points
+      const pointRadius = 4 / zoom;
+      penPoints.forEach((point, index) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Highlight first point (for closing path)
+        if (index === 0 && penPoints.length > 2) {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, pointRadius * 1.5, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ff6b00';
+          ctx.stroke();
+          ctx.strokeStyle = '#0d99ff';
+        }
+      });
+    }
+
+    ctx.restore();
+  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints]);
+
+  // Get cursor style based on tool and state
   const getCursor = (): string => {
+    // Space bar pan mode
+    if (isSpacePressed) {
+      return isDragging ? 'grabbing' : 'grab';
+    }
+    
     switch (tool) {
+      case 'select':
+        return isDragging && dragMode === 'move' ? 'move' : 'default';
       case 'hand':
         return isDragging ? 'grabbing' : 'grab';
       case 'text':
@@ -313,6 +507,43 @@ function Canvas() {
     }
   };
 
+  // Handle touch events for two-finger pan
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      // Two-finger pan - store initial touch positions
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+      setMoveStartPos({ x: centerX, y: centerY });
+      setDragMode('pan');
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2 && isDragging && dragMode === 'pan' && moveStartPos) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+      
+      const deltaX = centerX - moveStartPos.x;
+      const deltaY = centerY - moveStartPos.y;
+      
+      setPan(panX + deltaX, panY + deltaY);
+      setMoveStartPos({ x: centerX, y: centerY });
+    }
+  }, [isDragging, dragMode, moveStartPos, panX, panY, setPan]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (dragMode === 'pan') {
+      setIsDragging(false);
+      setDragMode(null);
+      setMoveStartPos(null);
+    }
+  }, [dragMode]);
+
   return (
     <div
       ref={containerRef}
@@ -322,8 +553,23 @@ function Canvas() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onContextMenu={handleContextMenu}
+      onDoubleClick={handleDoubleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
+      
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodeId={contextMenu.nodeId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

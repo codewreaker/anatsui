@@ -4,11 +4,12 @@ import Canvas from './components/Canvas';
 import LayersPanel from './components/LayersPanel';
 import PropertiesPanel from './components/PropertiesPanel';
 import TopBar from './components/TopBar';
+import FallbackWarning from './components/FallbackWarning';
 import { useEditorStore } from './store/editorStore';
 import type { ToolType } from './types';
 
 function App() {
-  const { tool, setTool, initCore } = useEditorStore();
+  const { tool, setTool, initCore, wasmEnabled, setSpacePressed, setPreviousTool } = useEditorStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,6 +24,14 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Space bar for temporary pan mode
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        setSpacePressed(true);
+        setPreviousTool(tool);
         return;
       }
 
@@ -56,9 +65,21 @@ function App() {
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // Release space bar pan mode
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setSpacePressed(false);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setTool]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [setTool, tool, setSpacePressed, setPreviousTool]);
 
   if (loading) {
     return (
@@ -74,6 +95,7 @@ function App() {
   return (
     <div className="w-full h-full flex flex-col">
       <TopBar />
+      {!wasmEnabled && <FallbackWarning />}
       <div className="flex-1 flex overflow-hidden">
         <Toolbar currentTool={tool} onToolChange={setTool} />
         <LayersPanel />

@@ -4,10 +4,17 @@ import type { ToolType, DesignNode, DocumentState } from '../types';
 interface EditorState {
   // Core
   coreLoaded: boolean;
+  wasmEnabled: boolean;
 
   // Tool
   tool: ToolType;
+  previousTool: ToolType | null;
   setTool: (tool: ToolType) => void;
+  setPreviousTool: (tool: ToolType | null) => void;
+
+  // Space bar panning
+  isSpacePressed: boolean;
+  setSpacePressed: (pressed: boolean) => void;
 
   // Viewport
   zoom: number;
@@ -38,10 +45,17 @@ interface EditorState {
 export const useEditorStore = create<EditorState>((set, get) => ({
   // Core
   coreLoaded: false,
+  wasmEnabled: false,
 
   // Tool
   tool: 'select',
+  previousTool: null,
   setTool: (tool) => set({ tool }),
+  setPreviousTool: (tool) => set({ previousTool: tool }),
+
+  // Space bar panning
+  isSpacePressed: false,
+  setSpacePressed: (pressed) => set({ isSpacePressed: pressed }),
 
   // Viewport
   zoom: 1,
@@ -95,42 +109,48 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   // Actions
   initCore: async () => {
+    let wasmLoaded = false;
+    
     try {
-      // Load WASM module
-      // const core = await import('@anatsui/core');
-      // await core.default();
-      
-      // Create initial page
-      const pageNode: DesignNode = {
-        id: 'page-1',
-        type: 'page',
-        name: 'Page 1',
-        visible: true,
-        locked: false,
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        rotation: 0,
-        opacity: 1,
-        fills: [],
-        strokes: [],
-        children: [],
-      };
-
-      set((state) => {
-        const nodes = new Map(state.document.nodes);
-        nodes.set(pageNode.id, pageNode);
-        return {
-          coreLoaded: true,
-          document: { ...state.document, nodes },
-        };
-      });
+      // Try to load WASM module
+      const core = await import('@anatsui/wasm');
+      if (core && core.default) {
+        await core.default();
+        wasmLoaded = true;
+        console.log('✅ WASM rendering engine loaded successfully');
+      }
     } catch (error) {
-      console.error('Failed to load WASM core:', error);
-      // Continue without WASM for now
-      set({ coreLoaded: true });
+      console.warn('⚠️ WASM core not available, using Canvas2D fallback:', error);
+      wasmLoaded = false;
     }
+      
+    // Create initial page
+    const pageNode: DesignNode = {
+      id: 'page-1',
+      type: 'page',
+      name: 'Page 1',
+      visible: true,
+      locked: false,
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      rotation: 0,
+      opacity: 1,
+      fills: [],
+      strokes: [],
+      children: [],
+    };
+
+    set((state) => {
+      const nodes = new Map(state.document.nodes);
+      nodes.set(pageNode.id, pageNode);
+      return {
+        coreLoaded: true,
+        wasmEnabled: wasmLoaded,
+        document: { ...state.document, nodes },
+      };
+    });
   },
 
   undo: () => {
