@@ -1,0 +1,65 @@
+[package]
+name = "anatsui-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Anatsui Team"]
+description = "High-performance Rust rendering engine for Anatsui design tool"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+wasm-bindgen = "0.2.92"
+wasm-bindgen-futures = "0.4.42"
+js-sys = "0.3.69"
+web-sys = { version = "0.3.69", features = [
+    "console",
+    "Window",
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "WebGl2RenderingContext",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlBuffer",
+    "WebGlVertexArrayObject",
+    "WebGlTexture",
+    "WebGlUniformLocation",
+    "WebGlFramebuffer",
+    "WebGlRenderbuffer",
+    "MouseEvent",
+    "WheelEvent",
+    "KeyboardEvent",
+    "PointerEvent",
+    "Performance",
+] }
+
+# Math and geometry
+glam = { version = "0.27", features = ["serde"] }
+lyon = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utilities
+console_error_panic_hook = { version = "0.1.7", optional = true }
+uuid = { version = "1.8", features = ["v4", "js", "serde"] }
+
+# Text rendering
+fontdue = "0.9"
+
+# Color
+palette = "0.7"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.42"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

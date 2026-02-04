@@ -1,0 +1,26 @@
+{
+  "name": "anatsui",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter './apps/*' dev",
+    "build": "bun run build:wasm && bun run --filter './apps/*' build",
+    "build:wasm": "cd packages/core && wasm-pack build --target web --out-dir ../wasm/pkg",
+    "test": "bun run --filter '*' test",
+    "lint": "bun run --filter '*' lint",
+    "clean": "rm -rf packages/wasm/pkg && bun run --filter '*' clean",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "packageManager": "bun@1.0.0"
+}
