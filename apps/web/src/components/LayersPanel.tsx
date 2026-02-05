@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
+import ContextMenu from './ContextMenu';
 
 function LayersPanel() {
   const { document, selection, selectNodes, updateNode } = useEditorStore();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
   // Get nodes sorted by order (excluding page)
   const nodes = Array.from(document.nodes.values())
@@ -35,6 +38,11 @@ function LayersPanel() {
               <li
                 key={node.id}
                 onClick={() => selectNodes([node.id])}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  selectNodes([node.id]);
+                  setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
+                }}
                 className={`
                   h-8 flex items-center px-3 gap-2 cursor-pointer
                   ${selection.includes(node.id) 
@@ -88,6 +96,16 @@ function LayersPanel() {
           </ul>
         )}
       </div>
+      
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodeId={contextMenu.nodeId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

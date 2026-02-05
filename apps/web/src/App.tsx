@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
 import LayersPanel from './components/LayersPanel';
 import PropertiesPanel from './components/PropertiesPanel';
@@ -9,7 +8,7 @@ import { useEditorStore } from './store/editorStore';
 import type { ToolType } from './types';
 
 function App() {
-  const { tool, setTool, initCore, wasmEnabled, setSpacePressed, setPreviousTool } = useEditorStore();
+  const { initCore, wasmEnabled, setSpacePressed, setPreviousTool } = useEditorStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,7 +30,8 @@ function App() {
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         setSpacePressed(true);
-        setPreviousTool(tool);
+        const currentTool = useEditorStore.getState().tool;
+        setPreviousTool(currentTool);
         return;
       }
 
@@ -49,7 +49,13 @@ function App() {
       const newTool = toolMap[e.key.toLowerCase()];
       if (newTool) {
         e.preventDefault();
-        setTool(newTool);
+        useEditorStore.getState().setTool(newTool);
+      }
+      
+      // Escape key - could be used to cancel operations
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        useEditorStore.getState().setTool('select');
       }
 
       // Zoom shortcuts
@@ -79,7 +85,7 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [setTool, tool, setSpacePressed, setPreviousTool]);
+  }, [setSpacePressed, setPreviousTool]);
 
   if (loading) {
     return (
@@ -97,7 +103,6 @@ function App() {
       <TopBar />
       {!wasmEnabled && <FallbackWarning />}
       <div className="flex-1 flex overflow-hidden">
-        <Toolbar currentTool={tool} onToolChange={setTool} />
         <LayersPanel />
         <Canvas />
         <PropertiesPanel />
