@@ -385,295 +385,29 @@ function Canvas() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  // Render canvas
+  // TODO: Integrate WASM WebGL2 renderer here
+  // This is a placeholder - the actual rendering will be done by the Rust WASM engine
+  // For now, just setup the canvas
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
+    if (!canvas) return;
 
-    // Resize canvas
+    // Resize canvas to container
     const container = containerRef.current;
     if (container) {
       canvas.width = container.clientWidth * window.devicePixelRatio;
       canvas.height = container.clientHeight * window.devicePixelRatio;
       canvas.style.width = `${container.clientWidth}px`;
       canvas.style.height = `${container.clientHeight}px`;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     }
 
-    // Clear
-    ctx.fillStyle = '#2c2c2c';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw grid
-    ctx.save();
-    ctx.translate(panX, panY);
-    ctx.scale(zoom, zoom);
-
-    // Grid pattern
-    const gridSize = 100;
-    ctx.strokeStyle = '#383838';
-    ctx.lineWidth = 1 / zoom;
-    
-    const startX = Math.floor(-panX / zoom / gridSize) * gridSize;
-    const startY = Math.floor(-panY / zoom / gridSize) * gridSize;
-    const endX = startX + (canvas.width / zoom) + gridSize * 2;
-    const endY = startY + (canvas.height / zoom) + gridSize * 2;
-
-    for (let x = startX; x < endX; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, endY);
-      ctx.stroke();
-    }
-
-    for (let y = startY; y < endY; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(startX, y);
-      ctx.lineTo(endX, y);
-      ctx.stroke();
-    }
-
-    // Draw nodes
-    document.nodes.forEach((node) => {
-      if (node.type === 'page') return;
-      if (!node.visible) return;
-
-      ctx.save();
-      ctx.translate(node.x, node.y);
-      ctx.rotate((node.rotation * Math.PI) / 180);
-      ctx.globalAlpha = node.opacity;
-
-      // Draw fill
-      if (node.fills.length > 0) {
-        const fill = node.fills[0];
-        if (fill.visible && fill.color) {
-          ctx.fillStyle = `rgba(${fill.color.r}, ${fill.color.g}, ${fill.color.b}, ${fill.color.a * fill.opacity})`;
-          
-          if (node.type === 'rectangle' || node.type === 'frame') {
-            if (node.cornerRadius) {
-              roundRect(ctx, 0, 0, node.width, node.height, node.cornerRadius);
-              ctx.fill();
-            } else {
-              ctx.fillRect(0, 0, node.width, node.height);
-            }
-          } else if (node.type === 'ellipse') {
-            ctx.beginPath();
-            ctx.ellipse(node.width / 2, node.height / 2, node.width / 2, node.height / 2, 0, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-      }
-
-      // Draw stroke
-      if (node.strokes.length > 0) {
-        const stroke = node.strokes[0];
-        if (stroke.visible) {
-          ctx.strokeStyle = `rgba(${stroke.color.r}, ${stroke.color.g}, ${stroke.color.b}, ${stroke.color.a * stroke.opacity})`;
-          ctx.lineWidth = stroke.width;
-
-          if (node.type === 'rectangle' || node.type === 'frame') {
-            if (node.cornerRadius) {
-              roundRect(ctx, 0, 0, node.width, node.height, node.cornerRadius);
-              ctx.stroke();
-            } else {
-              ctx.strokeRect(0, 0, node.width, node.height);
-            }
-          } else if (node.type === 'ellipse') {
-            ctx.beginPath();
-            ctx.ellipse(node.width / 2, node.height / 2, node.width / 2, node.height / 2, 0, 0, Math.PI * 2);
-            ctx.stroke();
-          } else if (node.type === 'line') {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(node.width, node.height);
-            ctx.stroke();
-          } else if (node.type === 'vector') {
-            // Draw vector paths (simplified - just draw the bounding box for now)
-            ctx.beginPath();
-            ctx.rect(0, 0, node.width, node.height);
-            ctx.stroke();
-          }
-        }
-      }
-
-      ctx.restore();
-
-      // Draw selection
-      if (selection.includes(node.id)) {
-        ctx.strokeStyle = '#0d99ff';
-        ctx.lineWidth = 2 / zoom;
-        ctx.strokeRect(node.x - 1, node.y - 1, node.width + 2, node.height + 2);
-
-        // Selection handles
-        const handleSize = 8 / zoom;
-        ctx.fillStyle = '#ffffff';
-        const handles = [
-          { x: node.x - handleSize / 2, y: node.y - handleSize / 2 },
-          { x: node.x + node.width - handleSize / 2, y: node.y - handleSize / 2 },
-          { x: node.x + node.width - handleSize / 2, y: node.y + node.height - handleSize / 2 },
-          { x: node.x - handleSize / 2, y: node.y + node.height - handleSize / 2 },
-        ];
-        handles.forEach((h) => {
-          ctx.fillRect(h.x, h.y, handleSize, handleSize);
-          ctx.strokeRect(h.x, h.y, handleSize, handleSize);
-        });
-      }
-    });
-
-    // Draw drag preview
-    if (isDragging && dragMode === 'create' && ['rectangle', 'ellipse', 'frame'].includes(tool)) {
-      const x = Math.min(dragStart.x, dragCurrent.x);
-      const y = Math.min(dragStart.y, dragCurrent.y);
-      const width = Math.abs(dragCurrent.x - dragStart.x);
-      const height = Math.abs(dragCurrent.y - dragStart.y);
-
-      ctx.strokeStyle = '#0d99ff';
-      ctx.lineWidth = 1 / zoom;
-      ctx.setLineDash([5 / zoom, 5 / zoom]);
-
-      if (tool === 'ellipse') {
-        ctx.beginPath();
-        ctx.ellipse(x + width / 2, y + height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        ctx.strokeRect(x, y, width, height);
-      }
-
-      ctx.setLineDash([]);
-    }
-
-    // Draw pen tool path preview
-    if (tool === 'pen' && penPoints.length > 0) {
-      ctx.strokeStyle = '#0d99ff';
-      ctx.lineWidth = 2 / zoom;
-      ctx.fillStyle = '#ffffff';
-      
-      // Draw bezier curves between points
-      ctx.beginPath();
-      ctx.moveTo(penPoints[0].x, penPoints[0].y);
-      
-      for (let i = 1; i < penPoints.length; i++) {
-        const prev = penPoints[i - 1];
-        const curr = penPoints[i];
-        
-        if (prev.handleOut || curr.handleIn) {
-          // Draw bezier curve
-          const cp1x = prev.x + (prev.handleOut?.x || 0);
-          const cp1y = prev.y + (prev.handleOut?.y || 0);
-          const cp2x = curr.x + (curr.handleIn?.x || 0);
-          const cp2y = curr.y + (curr.handleIn?.y || 0);
-          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, curr.x, curr.y);
-        } else {
-          // Draw straight line
-          ctx.lineTo(curr.x, curr.y);
-        }
-      }
-      
-      // Draw preview line/curve to current mouse position
-      if (penPoints.length >= 1 && !isDraggingHandle) {
-        const lastPoint = penPoints[penPoints.length - 1];
-        ctx.setLineDash([5 / zoom, 5 / zoom]);
-        
-        if (lastPoint.handleOut) {
-          const cp1x = lastPoint.x + lastPoint.handleOut.x;
-          const cp1y = lastPoint.y + lastPoint.handleOut.y;
-          ctx.bezierCurveTo(cp1x, cp1y, currentMousePos.x, currentMousePos.y, currentMousePos.x, currentMousePos.y);
-        } else {
-          ctx.lineTo(currentMousePos.x, currentMousePos.y);
-        }
-        
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else {
-        ctx.stroke();
-      }
-
-      // Draw points and handles
-      const pointRadius = 4 / zoom;
-      const handleRadius = 3 / zoom;
-      
-      penPoints.forEach((point, index) => {
-        // Draw handles
-        if (point.handleOut || point.handleIn) {
-          ctx.strokeStyle = '#18a0fb';
-          ctx.lineWidth = 1 / zoom;
-          
-          // Draw handle out
-          if (point.handleOut) {
-            const hx = point.x + point.handleOut.x;
-            const hy = point.y + point.handleOut.y;
-            ctx.beginPath();
-            ctx.moveTo(point.x, point.y);
-            ctx.lineTo(hx, hy);
-            ctx.stroke();
-            
-            // Handle circle
-            ctx.fillStyle = '#18a0fb';
-            ctx.beginPath();
-            ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          
-          // Draw handle in (if not same as out)
-          if (point.handleIn && (!point.handleOut || 
-              point.handleIn.x !== -point.handleOut.x || 
-              point.handleIn.y !== -point.handleOut.y)) {
-            const hx = point.x + point.handleIn.x;
-            const hy = point.y + point.handleIn.y;
-            ctx.beginPath();
-            ctx.moveTo(point.x, point.y);
-            ctx.lineTo(hx, hy);
-            ctx.stroke();
-            
-            // Handle circle
-            ctx.fillStyle = '#18a0fb';
-            ctx.beginPath();
-            ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        
-        // Draw anchor point
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#0d99ff';
-        ctx.lineWidth = 2 / zoom;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        
-        // Highlight first point (for closing path)
-        if (index === 0 && penPoints.length >= 3) {
-          ctx.beginPath();
-          ctx.arc(point.x, point.y, pointRadius * 1.8, 0, Math.PI * 2);
-          ctx.strokeStyle = '#18a0fb';
-          ctx.lineWidth = 2 / zoom;
-          ctx.stroke();
-        }
-      });
-      
-      // Draw temporary handle while dragging
-      if (isDraggingHandle && tempHandlePos && penPoints.length > 0) {
-        const lastPoint = penPoints[penPoints.length - 1];
-        ctx.strokeStyle = '#18a0fb';
-        ctx.lineWidth = 1 / zoom;
-        ctx.setLineDash([3 / zoom, 3 / zoom]);
-        ctx.beginPath();
-        ctx.moveTo(lastPoint.x, lastPoint.y);
-        ctx.lineTo(tempHandlePos.x, tempHandlePos.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        
-        // Temp handle circle
-        ctx.fillStyle = '#18a0fb';
-        ctx.beginPath();
-        ctx.arc(tempHandlePos.x, tempHandlePos.y, handleRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    ctx.restore();
+    // TODO: Initialize WebGL2 context and pass to Rust renderer
+    // const gl = canvas.getContext('webgl2');
+    // if (gl) {
+    //   // Pass GL context to WASM renderer
+    //   // wasmRenderer.init(gl);
+    //   // wasmRenderer.render(document, zoom, panX, panY);
+    // }
   }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints, currentMousePos, isDraggingHandle, tempHandlePos]);
 
   // Get cursor style based on tool and state
@@ -800,28 +534,6 @@ function Toolbar() {
       ))}
     </div>
   );
-}
-
-// Helper function for rounded rectangles
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
 }
 
 export default Canvas;

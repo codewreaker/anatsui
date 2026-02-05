@@ -3,19 +3,25 @@ import Canvas from './components/Canvas';
 import LayersPanel from './components/LayersPanel';
 import PropertiesPanel from './components/PropertiesPanel';
 import TopBar from './components/TopBar';
-import FallbackWarning from './components/FallbackWarning';
+import WasmErrorScreen from './components/WasmErrorScreen';
 import { useEditorStore } from './store/editorStore';
 import type { ToolType } from './types';
 
 function App() {
-  const { initCore, wasmEnabled, setSpacePressed, setPreviousTool } = useEditorStore();
+  const { initCore, setSpacePressed, setPreviousTool } = useEditorStore();
   const [loading, setLoading] = useState(true);
+  const [wasmError, setWasmError] = useState<Error | null>(null);
 
   useEffect(() => {
     // Initialize WASM core
-    initCore().then(() => {
-      setLoading(false);
-    });
+    initCore()
+      .then(() => {
+        setLoading(false);
+      })
+      .catch((error) => {
+        setLoading(false);
+        setWasmError(error);
+      });
   }, [initCore]);
 
   // Keyboard shortcuts
@@ -98,10 +104,14 @@ function App() {
     );
   }
 
+  // Show error screen if WASM failed to load
+  if (wasmError) {
+    return <WasmErrorScreen error={wasmError} />;
+  }
+
   return (
     <div className="w-full h-full flex flex-col">
       <TopBar />
-      {!wasmEnabled && <FallbackWarning />}
       <div className="flex-1 flex overflow-hidden">
         <LayersPanel />
         <Canvas />

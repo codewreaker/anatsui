@@ -109,19 +109,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   // Actions
   initCore: async () => {
-    let wasmLoaded = false;
-    
     try {
       // Try to load WASM module
       const core = await import('@anatsui/wasm');
       if (core && core.default) {
         await core.default();
-        wasmLoaded = true;
         console.log('✅ WASM rendering engine loaded successfully');
+      } else {
+        throw new Error('WASM module loaded but initialization failed');
       }
     } catch (error) {
-      console.warn('⚠️ WASM core not available, using Canvas2D fallback:', error);
-      wasmLoaded = false;
+      // In 2026, all browsers support WASM - if this fails, it's a real error
+      console.error('❌ Failed to load WASM rendering engine:', error);
+      throw error; // Propagate error to be caught by App.tsx
     }
       
     // Create initial page
@@ -147,7 +147,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       nodes.set(pageNode.id, pageNode);
       return {
         coreLoaded: true,
-        wasmEnabled: wasmLoaded,
+        wasmEnabled: true,
         document: { ...state.document, nodes },
       };
     });
