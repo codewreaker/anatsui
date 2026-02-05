@@ -143,4 +143,4 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for a comprehensive explanation of how 
 - **Rust** handles heavy computation (geometry, rendering, math)
 - **TypeScript** handles UI and user interactions
 - **WASM** bridges the two with near-native performance
-- **Dual rendering**: WebGL2 (Rust) for performance, Canvas2D (TS) as fallback
+- **WebGL2 only**: All rendering is done via the Rust WebGL2 renderer (no Canvas2D fallback)

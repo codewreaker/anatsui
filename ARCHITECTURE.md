@@ -105,8 +105,8 @@ User Interaction (React)
          ▼
 ┌────────────────────────┐
 │ TypeScript/React UI    │
-│ - Canvas.tsx           │◄──── Canvas2D Fallback
-│ - Toolbar.tsx          │      (when WASM unavailable)
+│ - Canvas.tsx           │
+│ - Toolbar.tsx          │
 │ - PropertiesPanel.tsx  │
 └────────┬───────────────┘
          │
@@ -119,10 +119,10 @@ User Interaction (React)
 │ - Document tree        │
 └────────┬───────────────┘
          │
-         │ Render Commands
+         │ Render Commands via WASM
          ▼
 ┌────────────────────────┐      ┌──────────────────┐
-│ WASM Module            │      │ WebGL2 Context   │
+│ Rust WASM Module       │      │ WebGL2 Context   │
 │ - Renderer             │─────▶│ - Vertex Buffers │
 │ - Geometry Engine      │      │ - Shaders        │
 │ - Scene Graph          │      │ - Textures       │
@@ -131,6 +131,8 @@ User Interaction (React)
          ▼
     Frame Buffer → Screen
 ```
+
+> **Note**: As of 2026, all modern browsers support WebAssembly. The app **requires** WASM to run - there is no Canvas2D fallback.
 
 ## The Rust Engine Architecture
 
@@ -294,57 +296,59 @@ interface EditorState {
 ```typescript
 // editorStore.ts - initCore()
 initCore: async () => {
-  let wasmLoaded = false;
-  
   try {
-    // Try to load WASM module
+    // Load WASM module - required for the app to run
     const core = await import('@anatsui/wasm');
     if (core && core.default) {
       await core.default(); // Initialize WASM memory
-      wasmLoaded = true;
-      
-      // Create renderer instance
-      const canvas = document.querySelector('canvas');
-      const renderer = new core.Renderer(canvas);
-      
-      set({ wasmEnabled: true, renderer });
+      console.log('✅ WASM rendering engine loaded successfully');
+    } else {
+      throw new Error('WASM module loaded but initialization failed');
     }
   } catch (error) {
-    console.warn('WASM not available, using Canvas2D fallback');
-    wasmLoaded = false;
+    // In 2026, all browsers support WASM - if this fails, it's a real error
+    console.error('❌ Failed to load WASM rendering engine:', error);
+    throw error; // Propagate to show error screen
   }
   
-  set({ coreLoaded: true, wasmEnabled: wasmLoaded });
+  set({ coreLoaded: true, wasmEnabled: true });
 }
 ```
 
-### 3. Dual Rendering Path
+### 3. WebGL2 Rendering (Rust-Powered)
 
-The app has **two renderers**:
+The app uses the **Rust WebGL2 renderer exclusively**:
 
-#### A. WebGL2 (via Rust/WASM) - Primary
-- Used when WASM loads successfully
-- High performance, GPU-accelerated
-- Handles complex scenes with effects
-
-#### B. Canvas2D (Pure TypeScript) - Fallback
 ```typescript
-// Canvas.tsx - Current implementation
+// Canvas.tsx - Using the Rust renderer
 useEffect(() => {
-  const canvas = canvasRef.current;
-  const ctx = canvas?.getContext('2d');
+  const initRenderer = async () => {
+    // Dynamic import of WASM module
+    const wasmModule = await import('@anatsui/wasm');
+    const renderer = new wasmModule.Renderer(canvasRef.current);
+    renderer.set_dark_background();
+    rendererRef.current = renderer;
+  };
+  initRenderer();
+}, []);
+
+// Render loop using Rust WebGL2 renderer
+useEffect(() => {
+  const renderer = rendererRef.current;
+  if (!renderer) return;
   
-  // Clear canvas
-  ctx.fillStyle = '#2c2c2c';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  renderer.begin_frame_js();
+  renderer.draw_grid(100.0);
   
-  // Draw each node
   document.nodes.forEach((node) => {
-    ctx.fillStyle = rgbaString(node.fills[0].color);
     if (node.type === 'rectangle') {
-      ctx.fillRect(node.x, node.y, node.width, node.height);
+      renderer.draw_rect_js(node.x, node.y, node.width, node.height, ...);
+    } else if (node.type === 'ellipse') {
+      renderer.draw_ellipse_js(node.x, node.y, node.width, node.height, ...);
     }
   });
+  
+  renderer.end_frame_js();
 }, [document.nodes, zoom, panX, panY]);
 ```
 
@@ -456,31 +460,36 @@ const renderer = new Renderer(canvas);
 - Don't need to rewrite everything in Rust
 - Best of both worlds
 
-### 4. **Progressive Enhancement**
-- Works without WASM (Canvas2D fallback)
-- Enhances with WASM when available
-- Graceful degradation
+### 4. **Modern Browser Target**
+- Requires WebAssembly (supported by all browsers since 2017)
+- Shows helpful error screen if WASM fails to load
+- No fallback needed - we target modern browsers only
 
 ## Current Status
 
 ✅ **Working**:
 - WASM build pipeline
 - TypeScript bindings generation
-- Dual rendering (Canvas2D + WebGL2)
+- Full WebGL2 rendering via Rust
 - Document model in Rust
 - Geometry utilities
+- Grid, rectangles, ellipses, lines rendering
+- Selection handles and drag previews
+- Pen tool with bezier curves
 
 🚧 **In Progress**:
-- Full WebGL2 renderer integration
+- Vector network editing (Figma-style paths)
 - Multiplayer sync engine
-- Advanced path editing
+- Text rendering
+- Advanced path operations
 
 ## Next Steps
 
-1. **Connect WASM Renderer**: Replace Canvas2D with actual Rust renderer calls
+1. **Vector Networks**: Implement Figma's vector network model for advanced path editing
 2. **Optimize Bundle**: Use `wasm-opt` for smaller WASM files
 3. **Add Workers**: Move heavy computations to Web Workers
 4. **Implement Multiplayer**: Use WebSocket + Rust sync engine
+5. **Text Rendering**: GPU-accelerated text with proper font handling
 
 ---
 

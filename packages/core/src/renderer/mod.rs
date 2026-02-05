@@ -261,3 +261,95 @@ impl Renderer {
         )
     }
 }
+
+// ============================================================================
+// JavaScript-callable Drawing API
+// ============================================================================
+// These methods are exported to JavaScript and can be called directly from
+// TypeScript to draw shapes on the canvas using the WebGL2 renderer.
+
+#[wasm_bindgen]
+impl Renderer {
+    /// Begin a new frame - call this before any drawing operations
+    /// This clears the canvas with the background color
+    pub fn begin_frame_js(&mut self) {
+        self.begin_frame();
+    }
+    
+    /// End the current frame - call this after all drawing operations
+    /// This flushes all pending GPU commands
+    pub fn end_frame_js(&self) {
+        self.end_frame();
+    }
+    
+    /// Draw a grid pattern (for the canvas background)
+    /// grid_size: Size of each grid cell in canvas coordinates
+    pub fn draw_grid(&mut self, grid_size: f32) {
+        let grid_color = Color::from_hex("#383838");
+        let viewport = &self.viewport;
+        
+        // Calculate visible area in canvas coordinates
+        let start_x = (-viewport.x / viewport.zoom / grid_size).floor() * grid_size;
+        let start_y = (-viewport.y / viewport.zoom / grid_size).floor() * grid_size;
+        let end_x = start_x + (self.context.width() as f32 / viewport.zoom) + grid_size * 2.0;
+        let end_y = start_y + (self.context.height() as f32 / viewport.zoom) + grid_size * 2.0;
+        
+        // Draw vertical lines
+        let mut x = start_x;
+        while x < end_x {
+            self.context.draw_line(x, start_y, x, end_y, grid_color, &self.viewport, 1.0);
+            x += grid_size;
+        }
+        
+        // Draw horizontal lines
+        let mut y = start_y;
+        while y < end_y {
+            self.context.draw_line(start_x, y, end_x, y, grid_color, &self.viewport, 1.0);
+            y += grid_size;
+        }
+    }
+    
+    /// Draw a filled rectangle with optional corner radius
+    /// x, y: Position in canvas coordinates
+    /// width, height: Size in canvas coordinates  
+    /// r, g, b, a: Color components (0.0 - 1.0)
+    /// corner_radius: Radius of rounded corners (0 for sharp corners)
+    pub fn draw_rect_js(&mut self, x: f32, y: f32, width: f32, height: f32, r: f32, g: f32, b: f32, a: f32, corner_radius: f32) {
+        let color = Color::new(r, g, b, a);
+        self.draw_rectangle(x, y, width, height, color, corner_radius);
+    }
+    
+    /// Draw a rectangle outline/stroke
+    /// stroke_width: Width of the stroke in canvas coordinates
+    pub fn draw_rect_stroke_js(&mut self, x: f32, y: f32, width: f32, height: f32, r: f32, g: f32, b: f32, a: f32, stroke_width: f32) {
+        let color = Color::new(r, g, b, a);
+        self.draw_rectangle_stroke(x, y, width, height, color, stroke_width);
+    }
+    
+    /// Draw a filled ellipse
+    pub fn draw_ellipse_js(&mut self, x: f32, y: f32, width: f32, height: f32, r: f32, g: f32, b: f32, a: f32) {
+        let color = Color::new(r, g, b, a);
+        self.draw_ellipse(x, y, width, height, color);
+    }
+    
+    /// Draw a line between two points
+    pub fn draw_line_js(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, r: f32, g: f32, b: f32, a: f32, width: f32) {
+        let color = Color::new(r, g, b, a);
+        self.draw_line(x1, y1, x2, y2, color, width);
+    }
+    
+    /// Draw selection handles around a selected object
+    pub fn draw_selection_js(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        self.draw_selection(x, y, width, height);
+    }
+    
+    /// Draw a selection marquee rectangle
+    pub fn draw_selection_rect_js(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        self.draw_selection_rect(x, y, width, height);
+    }
+    
+    /// Set the dark canvas background color
+    pub fn set_dark_background(&mut self) {
+        self.background_color = Color::from_hex("#2C2C2C");
+    }
+}

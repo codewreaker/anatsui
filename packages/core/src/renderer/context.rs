@@ -64,6 +64,14 @@ impl RenderContext {
         self.height = height;
         self.gl.viewport(0, 0, width as i32, height as i32);
     }
+    
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+    
+    pub fn height(&self) -> u32 {
+        self.height
+    }
 
     pub fn clear(&self, color: Color) {
         self.gl.clear_color(color.r, color.g, color.b, color.a);

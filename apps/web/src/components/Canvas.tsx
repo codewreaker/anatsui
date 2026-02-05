@@ -1,7 +1,10 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import ContextMenu from './ContextMenu';
-import type { Point, DesignNode, ToolType } from '../types';
+import type { Point, DesignNode } from '../types';
+
+// Import the WASM renderer - will be loaded async
+let Renderer: any = null;
 
 interface PenPoint {
   x: number;
@@ -13,6 +16,7 @@ interface PenPoint {
 function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<any>(null);
   const { 
     tool, 
     zoom, 
@@ -46,6 +50,9 @@ function Canvas() {
   const [, setIsPenActive] = useState(false);
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
   const [tempHandlePos, setTempHandlePos] = useState<Point | null>(null);
+  
+  // Track when renderer is ready to trigger re-render
+  const [rendererReady, setRendererReady] = useState(false);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback((screenX: number, screenY: number): Point => {
@@ -385,30 +392,165 @@ function Canvas() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  // TODO: Integrate WASM WebGL2 renderer here
-  // This is a placeholder - the actual rendering will be done by the Rust WASM engine
-  // For now, just setup the canvas
+  // Initialize the WASM renderer
+  useEffect(() => {
+    const initRenderer = async () => {
+      try {
+        // Dynamic import of WASM module
+        const wasmModule = await import('@anatsui/wasm');
+        Renderer = wasmModule.Renderer;
+        
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        // Create the WebGL2 renderer
+        const renderer = new Renderer(canvas);
+        renderer.set_dark_background();
+        rendererRef.current = renderer;
+        setRendererReady(true);
+        
+        console.log('✅ WebGL2 Renderer initialized');
+      } catch (error) {
+        console.error('Failed to initialize WASM renderer:', error);
+      }
+    };
+    
+    initRenderer();
+    
+    return () => {
+      // Cleanup renderer
+      if (rendererRef.current) {
+        rendererRef.current.free();
+        rendererRef.current = null;
+      }
+    };
+  }, []);
+
+  // Main render loop - uses the Rust WebGL2 renderer
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    const renderer = rendererRef.current;
+    
+    if (!canvas || !container) return;
 
     // Resize canvas to container
-    const container = containerRef.current;
-    if (container) {
-      canvas.width = container.clientWidth * window.devicePixelRatio;
-      canvas.height = container.clientHeight * window.devicePixelRatio;
-      canvas.style.width = `${container.clientWidth}px`;
-      canvas.style.height = `${container.clientHeight}px`;
+    const width = container.clientWidth * window.devicePixelRatio;
+    const height = container.clientHeight * window.devicePixelRatio;
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${container.clientWidth}px`;
+    canvas.style.height = `${container.clientHeight}px`;
+    
+    // If renderer not ready yet, skip
+    if (!renderer) return;
+    
+    // Update renderer viewport
+    renderer.resize(width, height);
+    renderer.set_viewport_position(panX, panY);
+    renderer.set_viewport_zoom(zoom);
+    
+    // Begin frame
+    renderer.begin_frame_js();
+    
+    // Draw grid
+    renderer.draw_grid(100.0);
+    
+    // Draw all nodes
+    document.nodes.forEach((node) => {
+      if (node.type === 'page') return;
+      if (!node.visible) return;
+      
+      // Get fill color
+      const fill = node.fills[0];
+      const hasFill = fill?.visible && fill?.color;
+      
+      // Get stroke
+      const stroke = node.strokes[0];
+      const hasStroke = stroke?.visible && stroke?.color;
+      
+      if (node.type === 'rectangle' || node.type === 'frame') {
+        // Draw fill
+        if (hasFill && fill.color) {
+          const c = fill.color;
+          renderer.draw_rect_js(
+            node.x, node.y, node.width, node.height,
+            c.r / 255, c.g / 255, c.b / 255, c.a * fill.opacity,
+            node.cornerRadius || 0
+          );
+        }
+        // Draw stroke
+        if (hasStroke && stroke.color) {
+          const c = stroke.color;
+          renderer.draw_rect_stroke_js(
+            node.x, node.y, node.width, node.height,
+            c.r / 255, c.g / 255, c.b / 255, c.a * stroke.opacity,
+            stroke.width
+          );
+        }
+      } else if (node.type === 'ellipse') {
+        // Draw ellipse fill
+        if (hasFill && fill.color) {
+          const c = fill.color;
+          renderer.draw_ellipse_js(
+            node.x, node.y, node.width, node.height,
+            c.r / 255, c.g / 255, c.b / 255, c.a * fill.opacity
+          );
+        }
+      } else if (node.type === 'line') {
+        // Draw line
+        if (hasStroke && stroke.color) {
+          const c = stroke.color;
+          renderer.draw_line_js(
+            node.x, node.y, node.x + node.width, node.y + node.height,
+            c.r / 255, c.g / 255, c.b / 255, c.a * stroke.opacity,
+            stroke.width
+          );
+        }
+      }
+      
+      // Draw selection highlight
+      if (selection.includes(node.id)) {
+        renderer.draw_selection_js(node.x, node.y, node.width, node.height);
+      }
+    });
+    
+    // Draw drag preview
+    if (isDragging && dragMode === 'create' && ['rectangle', 'ellipse', 'frame'].includes(tool)) {
+      const x = Math.min(dragStart.x, dragCurrent.x);
+      const y = Math.min(dragStart.y, dragCurrent.y);
+      const w = Math.abs(dragCurrent.x - dragStart.x);
+      const h = Math.abs(dragCurrent.y - dragStart.y);
+      
+      renderer.draw_selection_rect_js(x, y, w, h);
     }
-
-    // TODO: Initialize WebGL2 context and pass to Rust renderer
-    // const gl = canvas.getContext('webgl2');
-    // if (gl) {
-    //   // Pass GL context to WASM renderer
-    //   // wasmRenderer.init(gl);
-    //   // wasmRenderer.render(document, zoom, panX, panY);
-    // }
-  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints, currentMousePos, isDraggingHandle, tempHandlePos]);
+    
+    // Draw pen tool preview
+    if (tool === 'pen' && penPoints.length > 0) {
+      // Draw lines between pen points
+      for (let i = 0; i < penPoints.length - 1; i++) {
+        const p1 = penPoints[i];
+        const p2 = penPoints[i + 1];
+        renderer.draw_line_js(p1.x, p1.y, p2.x, p2.y, 0.05, 0.6, 1.0, 1.0, 2.0);
+      }
+      
+      // Draw preview line to cursor
+      if (penPoints.length >= 1) {
+        const last = penPoints[penPoints.length - 1];
+        renderer.draw_line_js(last.x, last.y, currentMousePos.x, currentMousePos.y, 0.05, 0.6, 1.0, 0.5, 1.0);
+      }
+      
+      // Draw anchor points
+      for (const point of penPoints) {
+        renderer.draw_rect_js(point.x - 4, point.y - 4, 8, 8, 1.0, 1.0, 1.0, 1.0, 0);
+        renderer.draw_rect_stroke_js(point.x - 4, point.y - 4, 8, 8, 0.05, 0.6, 1.0, 1.0, 2.0);
+      }
+    }
+    
+    // End frame
+    renderer.end_frame_js();
+    
+  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints, currentMousePos, isDraggingHandle, tempHandlePos, rendererReady]);
 
   // Get cursor style based on tool and state
   const getCursor = (): string => {

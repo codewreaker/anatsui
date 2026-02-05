@@ -15,6 +15,6 @@ export default defineConfig({
     target: 'esnext',
   },
   optimizeDeps: {
-    exclude: ['@anatsui/core'],
+    exclude: ['@anatsui/core', '@anatsui/wasm'],
   },
 });
