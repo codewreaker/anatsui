@@ -53,6 +53,27 @@ function Canvas() {
   
   // Track when renderer is ready to trigger re-render
   const [rendererReady, setRendererReady] = useState(false);
+  
+  // Track container dimensions to force re-render on resize
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        setContainerSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight
+        });
+      }
+    };
+    
+    // Initial size
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback((screenX: number, screenY: number): Point => {
@@ -434,21 +455,31 @@ function Canvas() {
     
     if (!canvas || !container) return;
 
-    // Resize canvas to container
-    const width = container.clientWidth * window.devicePixelRatio;
-    const height = container.clientHeight * window.devicePixelRatio;
+    // Get device pixel ratio for high-DPI displays
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Resize canvas to container (in device pixels for sharp rendering)
+    const cssWidth = container.clientWidth;
+    const cssHeight = container.clientHeight;
+    const width = Math.floor(cssWidth * dpr);
+    const height = Math.floor(cssHeight * dpr);
     canvas.width = width;
     canvas.height = height;
-    canvas.style.width = `${container.clientWidth}px`;
-    canvas.style.height = `${container.clientHeight}px`;
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
     
     // If renderer not ready yet, skip
     if (!renderer) return;
     
     // Update renderer viewport
+    // The canvas buffer is sized in device pixels (CSS size × devicePixelRatio)
+    // The shader uses u_resolution (device pixels) to compute clip space
+    // Therefore, all coordinates passed to the renderer must also be in device pixels
+    // We scale pan and zoom by DPR so that:
+    //   screenPos = canvasCoord * (zoom * dpr) + (pan * dpr) = device pixel position
     renderer.resize(width, height);
-    renderer.set_viewport_position(panX, panY);
-    renderer.set_viewport_zoom(zoom);
+    renderer.set_viewport_position(panX * dpr, panY * dpr);
+    renderer.set_viewport_zoom(zoom * dpr);
     
     // Begin frame
     renderer.begin_frame_js();
@@ -550,7 +581,7 @@ function Canvas() {
     // End frame
     renderer.end_frame_js();
     
-  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints, currentMousePos, isDraggingHandle, tempHandlePos, rendererReady]);
+  }, [document.nodes, selection, zoom, panX, panY, isDragging, dragMode, dragStart, dragCurrent, tool, penPoints, currentMousePos, isDraggingHandle, tempHandlePos, rendererReady, containerSize]);
 
   // Get cursor style based on tool and state
   const getCursor = (): string => {
